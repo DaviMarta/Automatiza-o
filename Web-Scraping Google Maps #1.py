@@ -9,6 +9,7 @@ from pyproj import Proj, transform, Transformer
 from sqlalchemy import create_engine
 import psycopg2
 import geoalchemy2
+import os
 keywords = ["loja de roupa","mecanica","sapato","suplemento","odontologia", "dentista","mercado","ortopetista","farmacia","acabamento","sacola"]
 
 for keyword in keywords:
@@ -29,7 +30,7 @@ for keyword in keywords:
         #prj.write(epsg)
         #prj.close()
 
-        return(spatial_df)
+        return spatial_df
 
     def find_locations(search_url, api_key):
 
@@ -39,13 +40,12 @@ for keyword in keywords:
 
         #while loop para solicitar e analisar os arquivos JSON solicitados
         while True:
-            respon = requests.get(search_url)
-            jj = json.loads(respon.text)
+            jj = requests.get(search_url).json()
             results = jj['results']
             #analise todas as informações necessárias
             for result in results:
                 name = result['name']
-                place_id = result ['place_id']
+                place_id = result['place_id']
                 lat = result['geometry']['location']['lat']
                 longi = result['geometry']['location']['lng']
                 rating = result['rating']
@@ -55,16 +55,16 @@ for keyword in keywords:
             
              #se houver uma próxima página, o loop será reiniciado com uma url atualizada
              #se não houver próxima página, o programa grava em um csv e salva em df    
-            if 'next_page_token' not in jj:
+            if 'next_page_token' not in jj.keys():
                 labels = ['Place Name','ID_Field', 'Latitude', 'Longitude', 'Rating', 'Tags']
                 location_df = pd.DataFrame.from_records(final_data, columns=labels)
                 #location_df.to_csv('location.csv')
                 break
             else:
                 next_page_token = jj['next_page_token']
-                search_url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?key='+str(api_key)+'&pagetoken='+str(next_page_token)
+                search_url = f'https://maps.googleapis.com/maps/api/place/nearbysearch/json?key={api_key}&pagetoken={next_page_token}'
 
-        return(final_data, location_df)
+        return (final_data, location_df)
 
     def find_details(final_data, api_key):
 
@@ -73,20 +73,18 @@ for keyword in keywords:
         #Usa o ID exclusivo de cada local para usar outra solicitação de API para obter informações de telefone e site de cada empresa.
         for places in final_data:
             id_field = places[1]
-            req_url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id='+str(id_field)+'&fields=name,formatted_phone_number,website&key='+str(api_key)
-            respon = requests.get(req_url)
-            jj = json.loads(respon.text)
-            print(jj)
+            req_url = f'https://maps.googleapis.com/maps/api/place/details/json?place_id={id_field}&fields=name,formatted_phone_number,website&key={api_key}'
+            jj = requests.get(req_url).json()
+            # print(jj)
             results = jj['result']
             identification = id_field
-            try:
-                phone = results["formatted_phone_number"]
-            except KeyError:
+            
+            if results.get("formatted_phone_number") is None:
                 continue
-            try:
-                website = results["website"]
-            except KeyError:
+            phone = results["formatted_phone_number"]
+            if result.get("website") is None:
                 continue
+            website = results["website"]
             title = results["name"]
             detailed_data = [title, identification, phone, website]
             final_detailed_data.append(detailed_data)
@@ -109,12 +107,13 @@ for keyword in keywords:
 
         
     def main():
+        # TODO: Read a json file for load configs.
         #assigning Parâmetros para pesquisa de localização
         api_key = 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
         search_radius = '100000'
         
         coords = '-X.XXXXXXXXXXXXXXXXXX, -X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
-        request_url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location='+coords+'&radius='+str(search_radius)+'&keyword='+str(keyword)+'&key='+str(api_key)
+        request_url = f'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={coords}&radius={search_radius}&keyword={keyword}&key={api_key}'
 
         #encontre os locais dos estabelecimentos desejados no google maps
         final_data, location_df = find_locations(request_url, api_key)
@@ -132,10 +131,6 @@ for keyword in keywords:
 
     if __name__ == "__main__":
         main()
-
-
-import os
-import pandas as pd
 
 path = r ""#COLOCAR O LOCAL ONDE ESTÁ OS EXCELS SALVOS
 
